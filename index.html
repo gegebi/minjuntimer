@@ -1,14 +1,311 @@
-<!doctype html>
-<html lang="en">
+<!DOCTYPE html>
+<html lang="ko">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Hello World</title>
-  <link href='/style.css' rel='stylesheet'>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>심플 모던 타이머 & 스톱워치</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600&family=JetBrains+Mono:wght@500&display=swap" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #0a1a10; /* Deep Forest Green */
+            color: #e0e7e1;
+            overflow: hidden;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            height: 100vh;
+            margin: 0;
+        }
+
+        .timer-display {
+            font-family: 'JetBrains+Mono', monospace;
+            font-variant-numeric: tabular-nums;
+            font-size: clamp(4rem, 12vw, 8rem);
+            font-weight: 300;
+            letter-spacing: -0.05em;
+            line-height: 1;
+        }
+
+        .glass-card {
+            background: rgba(22, 44, 30, 0.6);
+            backdrop-filter: blur(12px);
+            border: 1px solid rgba(255, 255, 255, 0.05);
+            border-radius: 2rem;
+            padding: 2.5rem;
+            box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
+            text-align: center;
+            width: 90%;
+            max-width: 550px;
+        }
+
+        .btn {
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+            cursor: pointer;
+        }
+
+        .btn:active {
+            transform: scale(0.95);
+        }
+
+        .btn-primary {
+            background-color: #2d5a3f;
+            color: #ffffff;
+        }
+
+        .btn-primary:hover {
+            background-color: #3d7a55;
+            box-shadow: 0 0 20px rgba(74, 222, 128, 0.2);
+        }
+
+        .btn-secondary {
+            background-color: rgba(255, 255, 255, 0.05);
+            color: #a0aec0;
+        }
+
+        .btn-secondary:hover {
+            background-color: rgba(255, 255, 255, 0.1);
+            color: #ffffff;
+        }
+
+        .mode-tab {
+            padding: 0.5rem 1.5rem;
+            border-radius: 9999px;
+            font-size: 0.8rem;
+            font-weight: 600;
+            letter-spacing: 0.05em;
+            transition: all 0.3s;
+            opacity: 0.5;
+        }
+
+        .mode-tab.active {
+            background: rgba(74, 222, 128, 0.15);
+            color: #4ade80;
+            opacity: 1;
+        }
+
+        .progress-container {
+            width: 100%;
+            height: 4px;
+            background: rgba(255, 255, 255, 0.05);
+            border-radius: 2px;
+            margin-top: 2rem;
+            overflow: hidden;
+        }
+
+        .progress-bar {
+            height: 100%;
+            background: #4ade80;
+            width: 0%;
+            transition: width 0.1s linear;
+        }
+
+        #status-msg {
+            font-size: 0.75rem;
+            text-transform: uppercase;
+            letter-spacing: 0.2em;
+            color: #4ade80;
+            margin-bottom: 0.5rem;
+            height: 1.2rem;
+        }
+
+        .ms-display {
+            font-size: 0.4em;
+            opacity: 0.6;
+            margin-left: 0.1em;
+        }
+    </style>
 </head>
 <body>
-  <h1>Hello, world!</h1>
-  <button onclick="console.log('hello');">Press me</button>
-  <script defer type="text/javascript" src="/main.js"></script>
+
+    <div class="glass-card">
+        <!-- 모드 선택 탭 -->
+        <div class="flex justify-center gap-2 mb-8">
+            <button id="timerModeBtn" onclick="switchMode('timer')" class="mode-tab active">TIMER</button>
+            <button id="stopwatchModeBtn" onclick="switchMode('stopwatch')" class="mode-tab">STOPWATCH</button>
+        </div>
+
+        <div id="status-msg">READY TO FOCUS</div>
+        
+        <!-- 메인 디스플레이 -->
+        <div class="timer-display flex items-baseline justify-center" id="display">
+            <span id="mainTime">25:00</span>
+            <span id="msTime" class="ms-display hidden">.00</span>
+        </div>
+
+        <div class="progress-container">
+            <div id="progress" class="progress-bar"></div>
+        </div>
+
+        <!-- 컨트롤 버튼 -->
+        <div class="flex gap-4 justify-center mt-10">
+            <button id="startPauseBtn" class="btn btn-primary px-8 py-3 rounded-full font-semibold flex-1">
+                START
+            </button>
+            <button id="resetBtn" class="btn btn-secondary px-8 py-3 rounded-full font-semibold">
+                RESET
+            </button>
+        </div>
+
+        <!-- 타이머 프리셋 (타이머 모드에서만 표시) -->
+        <div id="presets" class="flex gap-2 justify-center mt-6">
+            <button onclick="setTimer(25)" class="btn btn-secondary px-4 py-1 text-xs rounded-full">25m</button>
+            <button onclick="setTimer(50)" class="btn btn-secondary px-4 py-1 text-xs rounded-full">50m</button>
+            <button onclick="setTimer(10)" class="btn btn-secondary px-4 py-1 text-xs rounded-full">10m</button>
+        </div>
+    </div>
+
+    <script>
+        let mode = 'timer'; // 'timer' or 'stopwatch'
+        let isRunning = false;
+        let timerId = null;
+
+        // Timer variables
+        let timeLeft = 25 * 60;
+        let initialTime = 25 * 60;
+
+        // Stopwatch variables
+        let swTime = 0; // in milliseconds
+        let lastTimestamp = 0;
+
+        const mainTimeDisplay = document.getElementById('mainTime');
+        const msTimeDisplay = document.getElementById('msTime');
+        const startPauseBtn = document.getElementById('startPauseBtn');
+        const resetBtn = document.getElementById('resetBtn');
+        const statusMsg = document.getElementById('status-msg');
+        const progressBar = document.getElementById('progress');
+        const presetsDiv = document.getElementById('presets');
+
+        function switchMode(newMode) {
+            if (mode === newMode) return;
+            reset();
+            mode = newMode;
+            
+            document.getElementById('timerModeBtn').classList.toggle('active', mode === 'timer');
+            document.getElementById('stopwatchModeBtn').classList.toggle('active', mode === 'stopwatch');
+            
+            if (mode === 'timer') {
+                msTimeDisplay.classList.add('hidden');
+                presetsDiv.classList.remove('invisible');
+                statusMsg.textContent = 'READY TO FOCUS';
+                setTimer(25);
+            } else {
+                msTimeDisplay.classList.remove('hidden');
+                presetsDiv.classList.add('invisible');
+                statusMsg.textContent = 'STOPWATCH MODE';
+                updateDisplay();
+            }
+        }
+
+        function updateDisplay() {
+            if (mode === 'timer') {
+                const minutes = Math.floor(timeLeft / 60);
+                const seconds = timeLeft % 60;
+                mainTimeDisplay.textContent = `${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
+                
+                const percentage = ((initialTime - timeLeft) / initialTime) * 100;
+                progressBar.style.width = `${percentage}%`;
+                document.title = `${mainTimeDisplay.textContent} - Timer`;
+            } else {
+                const totalSeconds = Math.floor(swTime / 1000);
+                const minutes = Math.floor(totalSeconds / 60);
+                const seconds = totalSeconds % 60;
+                const ms = Math.floor((swTime % 1000) / 10);
+                
+                mainTimeDisplay.textContent = `${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
+                msTimeDisplay.textContent = `.${ms.toString().padStart(2, '0')}`;
+                
+                progressBar.style.width = '0%'; // 스톱워치에서는 진행바 사용 안 함 (또는 필요 시 커스텀 가능)
+                document.title = `${mainTimeDisplay.textContent} - Stopwatch`;
+            }
+        }
+
+        function setTimer(mins) {
+            reset();
+            timeLeft = mins * 60;
+            initialTime = timeLeft;
+            updateDisplay();
+        }
+
+        function toggleStartPause() {
+            if (isRunning) {
+                pause();
+            } else {
+                start();
+            }
+        }
+
+        function start() {
+            if (isRunning) return;
+            isRunning = true;
+            startPauseBtn.textContent = 'PAUSE';
+            statusMsg.textContent = mode === 'timer' ? 'FOCUSING...' : 'RUNNING';
+            statusMsg.style.color = '#4ade80';
+
+            if (mode === 'timer') {
+                timerId = setInterval(() => {
+                    if (timeLeft > 0) {
+                        timeLeft--;
+                        updateDisplay();
+                    } else {
+                        completeTimer();
+                    }
+                }, 1000);
+            } else {
+                lastTimestamp = Date.now();
+                timerId = setInterval(() => {
+                    const now = Date.now();
+                    swTime += now - lastTimestamp;
+                    lastTimestamp = now;
+                    updateDisplay();
+                }, 10);
+            }
+        }
+
+        function pause() {
+            clearInterval(timerId);
+            timerId = null;
+            isRunning = false;
+            startPauseBtn.textContent = 'RESUME';
+            statusMsg.textContent = 'PAUSED';
+            statusMsg.style.color = '#facc15';
+        }
+
+        function reset() {
+            clearInterval(timerId);
+            timerId = null;
+            isRunning = false;
+            startPauseBtn.textContent = 'START';
+            statusMsg.style.color = '#4ade80';
+            
+            if (mode === 'timer') {
+                timeLeft = initialTime;
+                statusMsg.textContent = 'READY TO FOCUS';
+            } else {
+                swTime = 0;
+                statusMsg.textContent = 'STOPWATCH MODE';
+            }
+            updateDisplay();
+        }
+
+        function completeTimer() {
+            clearInterval(timerId);
+            timerId = null;
+            isRunning = false;
+            startPauseBtn.textContent = 'START';
+            statusMsg.textContent = 'WELL DONE!';
+            statusMsg.style.color = '#ffffff';
+            
+            mainTimeDisplay.style.color = '#4ade80';
+            setTimeout(() => { mainTimeDisplay.style.color = '#e0e7e1'; }, 2000);
+        }
+
+        startPauseBtn.addEventListener('click', toggleStartPause);
+        resetBtn.addEventListener('click', reset);
+
+        // 초기화
+        updateDisplay();
+    </script>
 </body>
 </html>
